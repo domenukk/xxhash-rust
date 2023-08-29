@@ -7,7 +7,7 @@ use core::{ptr, slice};
 use crate::xxh32_common::*;
 
 #[inline(always)]
-fn read_le_unaligned(data: *const u8) -> u32 {
+unsafe fn read_le_unaligned(data: *const u8) -> u32 {
     debug_assert!(!data.is_null());
 
     unsafe {
@@ -16,7 +16,7 @@ fn read_le_unaligned(data: *const u8) -> u32 {
 }
 
 #[inline(always)]
-fn read_le_aligned(data: *const u8) -> u32 {
+unsafe fn read_le_aligned(data: *const u8) -> u32 {
     debug_assert!(!data.is_null());
 
     unsafe {
@@ -25,7 +25,7 @@ fn read_le_aligned(data: *const u8) -> u32 {
 }
 
 #[inline(always)]
-fn read_le_is_align(data: *const u8, is_aligned: bool) -> u32 {
+unsafe fn read_le_is_align(data: *const u8, is_aligned: bool) -> u32 {
     match is_aligned {
         true => read_le_aligned(data),
         false => read_le_unaligned(data)

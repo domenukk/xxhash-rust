@@ -45,7 +45,7 @@ const fn mult32_to64(left: u32, right: u32) -> u64 {
 }
 
 #[inline(always)]
-fn _mm_prefetch(_ptr: *const i8, _offset: isize) {
+unsafe fn _mm_prefetch(_ptr: *const i8, _offset: isize) {
     #[cfg(target_arch = "x86")]
     unsafe {
         core::arch::x86::_mm_prefetch(_ptr.offset(_offset), core::arch::x86::_MM_HINT_T0);
@@ -59,7 +59,7 @@ fn _mm_prefetch(_ptr: *const i8, _offset: isize) {
 
 #[inline(always)]
 ///It is faster to use unsafe offset than wasting time to slice
-fn slice_offset_ptr(slice: &[u8], offset: usize) -> *const u8 {
+unsafe fn slice_offset_ptr(slice: &[u8], offset: usize) -> *const u8 {
     debug_assert!(slice.len() >= offset);
 
     unsafe {
@@ -68,7 +68,7 @@ fn slice_offset_ptr(slice: &[u8], offset: usize) -> *const u8 {
 }
 
 #[inline(always)]
-fn read_32le_unaligned(data: *const u8) -> u32 {
+unsafe fn read_32le_unaligned(data: *const u8) -> u32 {
     debug_assert!(!data.is_null());
 
     unsafe {
@@ -77,7 +77,7 @@ fn read_32le_unaligned(data: *const u8) -> u32 {
 }
 
 #[inline(always)]
-fn read_64le_unaligned(data: *const u8) -> u64 {
+unsafe fn read_64le_unaligned(data: *const u8) -> u64 {
     debug_assert!(!data.is_null());
 
     unsafe {
@@ -86,13 +86,13 @@ fn read_64le_unaligned(data: *const u8) -> u64 {
 }
 
 #[inline(always)]
-fn mix_two_accs(acc: &mut [u64], secret: *const u8) -> u64 {
+unsafe fn mix_two_accs(acc: &mut [u64], secret: *const u8) -> u64 {
     mul128_fold64(acc[0] ^ read_64le_unaligned(secret),
                   acc[1] ^ read_64le_unaligned(unsafe { secret.offset(8) }))
 }
 
 #[inline]
-fn merge_accs(acc: &mut Acc, secret: *const u8, mut result: u64) -> u64 {
+unsafe fn merge_accs(acc: &mut Acc, secret: *const u8, mut result: u64) -> u64 {
     for idx in 0..4 {
         result = result.wrapping_add(mix_two_accs(&mut acc.0[idx * 2..], unsafe { secret.add(idx * 16) }));
     }
@@ -101,7 +101,7 @@ fn merge_accs(acc: &mut Acc, secret: *const u8, mut result: u64) -> u64 {
 }
 
 #[inline]
-fn mix16_b(input: *const u8, secret: *const u8, seed: u64) -> u64 {
+unsafe fn mix16_b(input: *const u8, secret: *const u8, seed: u64) -> u64 {
     let mut input_lo = read_64le_unaligned(input);
     let mut input_hi = read_64le_unaligned(unsafe { input.offset(8) });
 
@@ -112,7 +112,7 @@ fn mix16_b(input: *const u8, secret: *const u8, seed: u64) -> u64 {
 }
 
 #[inline]
-fn mix32_b(lo: &mut u64, hi: &mut u64, input_1: *const u8, input_2: *const u8, secret: *const u8, seed: u64) {
+unsafe fn mix32_b(lo: &mut u64, hi: &mut u64, input_1: *const u8, input_2: *const u8, secret: *const u8, seed: u64) {
     *lo = lo.wrapping_add(mix16_b(input_1, secret, seed));
     *lo ^= read_64le_unaligned(input_2).wrapping_add(read_64le_unaligned(unsafe { input_2.offset(8) }));
 
@@ -143,7 +143,7 @@ fn custom_default_secret(seed: u64) -> [u8; DEFAULT_SECRET_SIZE] {
 
 #[cfg(all(target_feature = "sse2", not(target_feature = "avx2")))]
 #[inline(always)]
-fn accumulate_512_sse2(acc: &mut Acc, input: *const u8, secret: *const u8) {
+unsafe fn accumulate_512_sse2(acc: &mut Acc, input: *const u8, secret: *const u8) {
     unsafe {
         #[cfg(target_arch = "x86")]
         use core::arch::x86::*;
@@ -171,7 +171,7 @@ fn accumulate_512_sse2(acc: &mut Acc, input: *const u8, secret: *const u8) {
 
 #[cfg(target_feature = "avx2")]
 #[inline(always)]
-fn accumulate_512_avx2(acc: &mut Acc, input: *const u8, secret: *const u8) {
+unsafe fn accumulate_512_avx2(acc: &mut Acc, input: *const u8, secret: *const u8) {
     unsafe {
         #[cfg(target_arch = "x86")]
         use core::arch::x86::*;
@@ -199,7 +199,7 @@ fn accumulate_512_avx2(acc: &mut Acc, input: *const u8, secret: *const u8) {
 
 #[cfg(not(any(target_feature = "avx2", target_feature = "sse2")))]
 #[inline(always)]
-fn accumulate_512_scalar(acc: &mut Acc, input: *const u8, secret: *const u8) {
+unsafe fn accumulate_512_scalar(acc: &mut Acc, input: *const u8, secret: *const u8) {
     for idx in 0..ACC_NB {
         let data_val = read_64le_unaligned(unsafe  { input.add(8 * idx) });
         let data_key = data_val ^ read_64le_unaligned(unsafe { secret.add(8 * idx) });
@@ -209,7 +209,7 @@ fn accumulate_512_scalar(acc: &mut Acc, input: *const u8, secret: *const u8) {
     }
 }
 
-fn accumulate_512(acc: &mut Acc, input: *const u8, secret: *const u8) {
+unsafe fn accumulate_512(acc: &mut Acc, input: *const u8, secret: *const u8) {
     #[cfg(all(target_feature = "sse2", not(target_feature = "avx2")))]
     accumulate_512_sse2(acc, input, secret);
 
@@ -222,7 +222,7 @@ fn accumulate_512(acc: &mut Acc, input: *const u8, secret: *const u8) {
 
 #[cfg(all(target_feature = "sse2", not(target_feature = "avx2")))]
 #[inline(always)]
-fn scramble_acc_sse2(acc: &mut Acc, secret: *const u8) {
+unsafe fn scramble_acc_sse2(acc: &mut Acc, secret: *const u8) {
     unsafe {
         #[cfg(target_arch = "x86")]
         use core::arch::x86::*;
@@ -251,7 +251,7 @@ fn scramble_acc_sse2(acc: &mut Acc, secret: *const u8) {
 
 #[cfg(target_feature = "avx2")]
 #[inline(always)]
-fn scramble_acc_avx2(acc: &mut Acc, secret: *const u8) {
+unsafe fn scramble_acc_avx2(acc: &mut Acc, secret: *const u8) {
     unsafe {
         #[cfg(target_arch = "x86")]
         use core::arch::x86::*;
@@ -280,7 +280,7 @@ fn scramble_acc_avx2(acc: &mut Acc, secret: *const u8) {
 
 #[cfg(not(any(target_feature = "avx2", target_feature = "sse2")))]
 #[inline(always)]
-fn scramble_acc_scalar(acc: &mut Acc, secret: *const u8) {
+unsafe fn scramble_acc_scalar(acc: &mut Acc, secret: *const u8) {
     for idx in 0..ACC_NB {
         let key = read_64le_unaligned(unsafe { secret.add(8 * idx) });
         let mut acc_val = xorshift64(acc.0[idx], 47);
@@ -289,7 +289,7 @@ fn scramble_acc_scalar(acc: &mut Acc, secret: *const u8) {
     }
 }
 
-fn scramble_acc(acc: &mut Acc, secret: *const u8) {
+unsafe fn scramble_acc(acc: &mut Acc, secret: *const u8) {
     #[cfg(all(target_feature = "sse2", not(target_feature = "avx2")))]
     scramble_acc_sse2(acc, secret);
 
@@ -301,7 +301,7 @@ fn scramble_acc(acc: &mut Acc, secret: *const u8) {
 }
 
 #[inline(always)]
-fn accumulate_loop(acc: &mut Acc, input: *const u8, secret: *const u8, nb_stripes: usize) {
+unsafe fn accumulate_loop(acc: &mut Acc, input: *const u8, secret: *const u8, nb_stripes: usize) {
     for idx in 0..nb_stripes {
         _mm_prefetch(input as _, 320);
         accumulate_512(acc, unsafe { input.add(idx * STRIPE_LEN) }, unsafe { secret.add(idx * SECRET_CONSUME_RATE) });
@@ -565,7 +565,7 @@ impl Xxh3 {
     }
 
     #[inline]
-    fn consume_stripes(acc: &mut Acc, nb_stripes: usize, nb_stripes_acc: usize, input: *const u8, secret: &[u8; DEFAULT_SECRET_SIZE]) -> usize {
+    unsafe fn consume_stripes(acc: &mut Acc, nb_stripes: usize, nb_stripes_acc: usize, input: *const u8, secret: &[u8; DEFAULT_SECRET_SIZE]) -> usize {
         if (STRIPES_PER_BLOCK - nb_stripes_acc) <= nb_stripes {
             let stripes_to_end = STRIPES_PER_BLOCK - nb_stripes_acc;
             let stripes_after_end = nb_stripes - stripes_to_end;

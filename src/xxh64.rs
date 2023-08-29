@@ -7,7 +7,7 @@ use core::{ptr, slice};
 use crate::xxh64_common::*;
 
 #[inline(always)]
-fn read_32le_unaligned(data: *const u8) -> u32 {
+unsafe fn read_32le_unaligned(data: *const u8) -> u32 {
     debug_assert!(!data.is_null());
 
     unsafe {
@@ -16,7 +16,7 @@ fn read_32le_unaligned(data: *const u8) -> u32 {
 }
 
 #[inline(always)]
-fn read_32le_aligned(data: *const u8) -> u32 {
+unsafe fn read_32le_aligned(data: *const u8) -> u32 {
     debug_assert!(!data.is_null());
 
     unsafe {
@@ -25,7 +25,7 @@ fn read_32le_aligned(data: *const u8) -> u32 {
 }
 
 #[inline(always)]
-fn read_32le_is_align(data: *const u8, is_aligned: bool) -> u32 {
+unsafe fn read_32le_is_align(data: *const u8, is_aligned: bool) -> u32 {
     match is_aligned {
         true => read_32le_aligned(data),
         false => read_32le_unaligned(data),
@@ -33,7 +33,7 @@ fn read_32le_is_align(data: *const u8, is_aligned: bool) -> u32 {
 }
 
 #[inline(always)]
-fn read_64le_unaligned(data: *const u8) -> u64 {
+unsafe fn read_64le_unaligned(data: *const u8) -> u64 {
     debug_assert!(!data.is_null());
 
     unsafe {
@@ -42,7 +42,7 @@ fn read_64le_unaligned(data: *const u8) -> u64 {
 }
 
 #[inline(always)]
-fn read_64le_aligned(data: *const u8) -> u64 {
+unsafe fn read_64le_aligned(data: *const u8) -> u64 {
     debug_assert!(!data.is_null());
 
     unsafe {
@@ -51,7 +51,7 @@ fn read_64le_aligned(data: *const u8) -> u64 {
 }
 
 #[inline(always)]
-fn read_64le_is_align(data: *const u8, is_aligned: bool) -> u64 {
+unsafe fn read_64le_is_align(data: *const u8, is_aligned: bool) -> u64 {
     match is_aligned {
         true => read_64le_aligned(data),
         false => read_64le_unaligned(data),
