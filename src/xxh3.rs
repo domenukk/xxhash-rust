@@ -349,10 +349,10 @@ fn xxh3_64_4to8(input: &[u8], mut seed: u64, secret: &[u8]) -> u64 {
 
     seed ^= ((seed as u32).swap_bytes() as u64) << 32;
 
-    let input1 = read_32le_unaligned(input.as_ptr());
-    let input2 = read_32le_unaligned(slice_offset_ptr(input, input.len() - 4));
+    let input1 = unsafe { read_32le_unaligned(input.as_ptr()) };
+    let input2 = unsafe { read_32le_unaligned(slice_offset_ptr(input, input.len() - 4)) };
 
-    let flip = (read_64le_unaligned(slice_offset_ptr(secret, 8)) ^ read_64le_unaligned(slice_offset_ptr(secret, 16))).wrapping_sub(seed);
+    let flip = unsafe { (read_64le_unaligned(slice_offset_ptr(secret, 8)) ^ read_64le_unaligned(slice_offset_ptr(secret, 16))).wrapping_sub(seed) };
     let input64 = (input2 as u64).wrapping_add((input1 as u64) << 32);
     let keyed = input64 ^ flip;
 
@@ -363,11 +363,11 @@ fn xxh3_64_4to8(input: &[u8], mut seed: u64, secret: &[u8]) -> u64 {
 fn xxh3_64_9to16(input: &[u8], seed: u64, secret: &[u8]) -> u64 {
     debug_assert!(input.len() >= 9 && input.len() <= 16);
 
-    let flip1 = (read_64le_unaligned(slice_offset_ptr(secret, 24)) ^ read_64le_unaligned(slice_offset_ptr(secret, 32))).wrapping_add(seed);
-    let flip2 = (read_64le_unaligned(slice_offset_ptr(secret, 40)) ^ read_64le_unaligned(slice_offset_ptr(secret, 48))).wrapping_sub(seed);
+    let flip1 = unsafe { (read_64le_unaligned(slice_offset_ptr(secret, 24)) ^ read_64le_unaligned(slice_offset_ptr(secret, 32))).wrapping_add(seed) };
+    let flip2 = unsafe { (read_64le_unaligned(slice_offset_ptr(secret, 40)) ^ read_64le_unaligned(slice_offset_ptr(secret, 48))).wrapping_sub(seed) };
 
-    let input_lo = read_64le_unaligned(input.as_ptr()) ^ flip1;
-    let input_hi = read_64le_unaligned(slice_offset_ptr(input, input.len() - 8)) ^ flip2;
+    let input_lo = unsafe { read_64le_unaligned(input.as_ptr()) ^ flip1 };
+    let input_hi = unsafe { read_64le_unaligned(slice_offset_ptr(input, input.len() - 8)) ^ flip2 };
 
     let acc = (input.len() as u64).wrapping_add(input_lo.swap_bytes())
                                   .wrapping_add(input_hi)
@@ -385,7 +385,9 @@ fn xxh3_64_0to16(input: &[u8], seed: u64, secret: &[u8]) -> u64 {
     } else if input.len() > 0 {
         xxh3_64_1to3(input, seed, secret)
     } else {
-        xxh64::avalanche(seed ^ (read_64le_unaligned(slice_offset_ptr(secret, 56)) ^ read_64le_unaligned(slice_offset_ptr(secret, 64))))
+        unsafe {
+            xxh64::avalanche(seed ^ (read_64le_unaligned(slice_offset_ptr(secret, 56)) ^ read_64le_unaligned(slice_offset_ptr(secret, 64))))
+        }
     }
 }
 
@@ -393,23 +395,25 @@ fn xxh3_64_0to16(input: &[u8], seed: u64, secret: &[u8]) -> u64 {
 fn xxh3_64_7to128(input: &[u8], seed: u64, secret: &[u8]) -> u64 {
     let mut acc = (input.len() as u64).wrapping_mul(xxh64::PRIME_1);
 
-    if input.len() > 32 {
-        if input.len() > 64 {
-            if input.len() > 96 {
-                acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, 48), slice_offset_ptr(secret, 96), seed));
-                acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, input.len()-64), slice_offset_ptr(secret, 112), seed));
+    unsafe {
+        if input.len() > 32 {
+            if input.len() > 64 {
+                if input.len() > 96 {
+                    acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, 48), slice_offset_ptr(secret, 96), seed));
+                    acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, input.len()-64), slice_offset_ptr(secret, 112), seed));
+                }
+
+                acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, 32), slice_offset_ptr(secret, 64), seed));
+                acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, input.len()-48), slice_offset_ptr(secret, 80), seed));
             }
 
-            acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, 32), slice_offset_ptr(secret, 64), seed));
-            acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, input.len()-48), slice_offset_ptr(secret, 80), seed));
+            acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, 16), slice_offset_ptr(secret, 32), seed));
+            acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, input.len()-32), slice_offset_ptr(secret, 48), seed));
         }
 
-        acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, 16), slice_offset_ptr(secret, 32), seed));
-        acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, input.len()-32), slice_offset_ptr(secret, 48), seed));
+        acc = acc.wrapping_add(mix16_b(input.as_ptr(), secret.as_ptr(), seed));
+        acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, input.len()-16), slice_offset_ptr(secret, 16), seed));
     }
-
-    acc = acc.wrapping_add(mix16_b(input.as_ptr(), secret.as_ptr(), seed));
-    acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, input.len()-16), slice_offset_ptr(secret, 16), seed));
 
     avalanche(acc)
 }
@@ -423,15 +427,15 @@ fn xxh3_64_129to240(input: &[u8], seed: u64, secret: &[u8]) -> u64 {
     let nb_rounds = input.len() / 16;
 
     for idx in 0..8 {
-        acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, 16*idx), slice_offset_ptr(secret, 16*idx), seed));
+        acc = acc.wrapping_add(unsafe { mix16_b(slice_offset_ptr(input, 16*idx), slice_offset_ptr(secret, 16*idx), seed) });
     }
     acc = avalanche(acc);
 
     for idx in 8..nb_rounds {
-        acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, 16*idx), slice_offset_ptr(secret, 16*(idx-8) + START_OFFSET), seed));
+        acc = acc.wrapping_add(unsafe { mix16_b(slice_offset_ptr(input, 16*idx), slice_offset_ptr(secret, 16*(idx-8) + START_OFFSET), seed) });
     }
 
-    acc = acc.wrapping_add(mix16_b(slice_offset_ptr(input, input.len()-16), slice_offset_ptr(secret, SECRET_SIZE_MIN-LAST_OFFSET), seed));
+    acc = acc.wrapping_add(unsafe { mix16_b(slice_offset_ptr(input, input.len()-16), slice_offset_ptr(secret, SECRET_SIZE_MIN-LAST_OFFSET), seed) });
 
     avalanche(acc)
 }
@@ -456,7 +460,7 @@ fn xxh3_64_long_impl(input: &[u8], secret: &[u8]) -> u64 {
 
     hash_long_internal_loop(&mut acc, input, secret);
 
-    merge_accs(&mut acc, slice_offset_ptr(secret, SECRET_MERGEACCS_START), (input.len() as u64).wrapping_mul(xxh64::PRIME_1))
+    unsafe { merge_accs(&mut acc, slice_offset_ptr(secret, SECRET_MERGEACCS_START), (input.len() as u64).wrapping_mul(xxh64::PRIME_1)) }
 }
 
 #[inline(never)]
@@ -602,7 +606,7 @@ impl Xxh3 {
                 ptr::copy_nonoverlapping(input.as_ptr(), (self.buffer.0.as_mut_ptr() as *mut u8).offset(self.buffered_size as isize), fill_len)
             }
 
-            self.nb_stripes_acc = Self::consume_stripes(&mut self.acc, INTERNAL_BUFFER_STRIPES, self.nb_stripes_acc, self.buffer.0.as_ptr(), &self.custom_secret.0);
+            self.nb_stripes_acc = unsafe { Self::consume_stripes(&mut self.acc, INTERNAL_BUFFER_STRIPES, self.nb_stripes_acc, self.buffer.0.as_ptr(), &self.custom_secret.0) };
 
             input = &input[fill_len..];
             self.buffered_size = 0;
@@ -619,8 +623,8 @@ impl Xxh3 {
             {
                 let stripes_to_end = STRIPES_PER_BLOCK - self.nb_stripes_acc;
 
-                accumulate_loop(&mut self.acc, input.as_ptr(), slice_offset_ptr(&self.custom_secret.0, self.nb_stripes_acc * SECRET_CONSUME_RATE), stripes_to_end);
-                scramble_acc(&mut self.acc, slice_offset_ptr(&self.custom_secret.0, DEFAULT_SECRET_SIZE - STRIPE_LEN));
+                unsafe { accumulate_loop(&mut self.acc, input.as_ptr(), slice_offset_ptr(&self.custom_secret.0, self.nb_stripes_acc * SECRET_CONSUME_RATE), stripes_to_end) };
+                unsafe { scramble_acc(&mut self.acc, slice_offset_ptr(&self.custom_secret.0, DEFAULT_SECRET_SIZE - STRIPE_LEN)) };
                 self.nb_stripes_acc = 0;
 
                 input = &input[stripes_to_end * STRIPE_LEN..];
@@ -628,13 +632,13 @@ impl Xxh3 {
             }
 
             while nb_stripes >= STRIPES_PER_BLOCK {
-                accumulate_loop(&mut self.acc, input.as_ptr(), self.custom_secret.0.as_ptr(), STRIPES_PER_BLOCK);
-                scramble_acc(&mut self.acc, slice_offset_ptr(&self.custom_secret.0, DEFAULT_SECRET_SIZE - STRIPE_LEN));
+                unsafe { accumulate_loop(&mut self.acc, input.as_ptr(), self.custom_secret.0.as_ptr(), STRIPES_PER_BLOCK) };
+                unsafe { scramble_acc(&mut self.acc, slice_offset_ptr(&self.custom_secret.0, DEFAULT_SECRET_SIZE - STRIPE_LEN)) };
                 input = &input[STRIPES_PER_BLOCK * STRIPE_LEN..];
                 nb_stripes -= STRIPES_PER_BLOCK;
             }
 
-            accumulate_loop(&mut self.acc, input.as_ptr(), self.custom_secret.0.as_ptr(), nb_stripes);
+            unsafe { accumulate_loop(&mut self.acc, input.as_ptr(), self.custom_secret.0.as_ptr(), nb_stripes) };
             input = &input[nb_stripes * STRIPE_LEN..];
             debug_assert_ne!(input.len(), 0);
             self.nb_stripes_acc = nb_stripes;
@@ -644,7 +648,7 @@ impl Xxh3 {
             }
         } else if input.len() > INTERNAL_BUFFER_SIZE {
             loop {
-                self.nb_stripes_acc = Self::consume_stripes(&mut self.acc, INTERNAL_BUFFER_STRIPES, self.nb_stripes_acc, input.as_ptr(), &self.custom_secret.0);
+                self.nb_stripes_acc = unsafe { Self::consume_stripes(&mut self.acc, INTERNAL_BUFFER_STRIPES, self.nb_stripes_acc, input.as_ptr(), &self.custom_secret.0) };
                 input = &input[INTERNAL_BUFFER_SIZE..];
 
                 if input.len() <= INTERNAL_BUFFER_SIZE {
@@ -669,12 +673,13 @@ impl Xxh3 {
     fn digest_internal(&self, acc: &mut Acc) {
         if self.buffered_size as usize >= STRIPE_LEN {
             let nb_stripes = (self.buffered_size as usize - 1) / STRIPE_LEN;
-            Self::consume_stripes(acc, nb_stripes, self.nb_stripes_acc, self.buffer.0.as_ptr(), &self.custom_secret.0);
+            unsafe {
+                Self::consume_stripes(acc, nb_stripes, self.nb_stripes_acc, self.buffer.0.as_ptr(), &self.custom_secret.0);
 
-            accumulate_512(acc,
+                accumulate_512(acc,
                            slice_offset_ptr(&self.buffer.0, self.buffered_size as usize - STRIPE_LEN),
-                           slice_offset_ptr(&self.custom_secret.0, self.custom_secret.0.len() - STRIPE_LEN - SECRET_LASTACC_START)
-            );
+                           slice_offset_ptr(&self.custom_secret.0, self.custom_secret.0.len() - STRIPE_LEN - SECRET_LASTACC_START))
+            };
         } else {
             let mut last_stripe = mem::MaybeUninit::<[u8; STRIPE_LEN]>::uninit();
             let catchup_size = STRIPE_LEN - self.buffered_size as usize;
@@ -683,9 +688,9 @@ impl Xxh3 {
             unsafe {
                 ptr::copy_nonoverlapping(slice_offset_ptr(&self.buffer.0, self.buffer.0.len() - catchup_size), last_stripe.as_mut_ptr() as _, catchup_size);
                 ptr::copy_nonoverlapping(self.buffer.0.as_ptr(), (last_stripe.as_mut_ptr() as *mut u8).add(catchup_size), self.buffered_size as usize);
-            }
 
-            accumulate_512(acc, last_stripe.as_ptr() as _, slice_offset_ptr(&self.custom_secret.0, self.custom_secret.0.len() - STRIPE_LEN - SECRET_LASTACC_START));
+                accumulate_512(acc, last_stripe.as_ptr() as _, slice_offset_ptr(&self.custom_secret.0, self.custom_secret.0.len() - STRIPE_LEN - SECRET_LASTACC_START))
+            };
         }
     }
 
@@ -695,8 +700,8 @@ impl Xxh3 {
             let mut acc = self.acc.clone();
             self.digest_internal(&mut acc);
 
-            merge_accs(&mut acc, slice_offset_ptr(&self.custom_secret.0, SECRET_MERGEACCS_START),
-                       self.total_len.wrapping_mul(xxh64::PRIME_1))
+            unsafe { merge_accs(&mut acc, slice_offset_ptr(&self.custom_secret.0, SECRET_MERGEACCS_START),
+                       self.total_len.wrapping_mul(xxh64::PRIME_1)) }
         } else if self.seed > 0 {
             //Technically we should not need to use it.
             //But in all actuality original xxh3 implementation uses default secret for input with size less or equal to MID_SIZE_MAX
@@ -712,12 +717,12 @@ impl Xxh3 {
             let mut acc = self.acc.clone();
             self.digest_internal(&mut acc);
 
-            let low = merge_accs(&mut acc, slice_offset_ptr(&self.custom_secret.0, SECRET_MERGEACCS_START),
-                                 self.total_len.wrapping_mul(xxh64::PRIME_1));
-            let high = merge_accs(&mut acc,
+            let low = unsafe { merge_accs(&mut acc, slice_offset_ptr(&self.custom_secret.0, SECRET_MERGEACCS_START),
+                                 self.total_len.wrapping_mul(xxh64::PRIME_1)) };
+            let high = unsafe { merge_accs(&mut acc,
                                   slice_offset_ptr(&self.custom_secret.0,
                                                    self.custom_secret.0.len() - mem::size_of_val(&self.acc) - SECRET_MERGEACCS_START),
-                                  !self.total_len.wrapping_mul(xxh64::PRIME_2));
+                                  !self.total_len.wrapping_mul(xxh64::PRIME_2)) };
             ((high as u128) << 64) | (low as u128)
         } else if self.seed > 0 {
             //Technically we should not need to use it.
@@ -813,62 +818,64 @@ fn xxh3_128_long_impl(input: &[u8], secret: &[u8]) -> u128 {
     hash_long_internal_loop(&mut acc, input, secret);
 
     debug_assert!(secret.len() >= mem::size_of::<Acc>() + SECRET_MERGEACCS_START);
-    let lo = merge_accs(&mut acc, slice_offset_ptr(secret, SECRET_MERGEACCS_START), (input.len() as u64).wrapping_mul(xxh64::PRIME_1));
-    let hi = merge_accs(&mut acc,
+    let lo = unsafe { merge_accs(&mut acc, slice_offset_ptr(secret, SECRET_MERGEACCS_START), (input.len() as u64).wrapping_mul(xxh64::PRIME_1)) };
+    let hi = unsafe { merge_accs(&mut acc,
                         slice_offset_ptr(secret, secret.len() - mem::size_of::<Acc>() - SECRET_MERGEACCS_START),
-                        !(input.len() as u64).wrapping_mul(xxh64::PRIME_2));
+                        !(input.len() as u64).wrapping_mul(xxh64::PRIME_2)) };
 
     lo as u128 | (hi as u128) << 64
 }
 
 #[inline(always)]
 fn xxh3_128_9to16(input: &[u8], seed: u64, secret: &[u8]) -> u128 {
-    let flip_lo = (read_64le_unaligned(slice_offset_ptr(secret, 32)) ^ read_64le_unaligned(slice_offset_ptr(secret, 40))).wrapping_sub(seed);
-    let flip_hi = (read_64le_unaligned(slice_offset_ptr(secret, 48)) ^ read_64le_unaligned(slice_offset_ptr(secret, 56))).wrapping_add(seed);
-    let input_lo = read_64le_unaligned(input.as_ptr());
-    let mut input_hi = read_64le_unaligned(slice_offset_ptr(input, input.len() - 8));
+    unsafe {
+        let flip_lo = (read_64le_unaligned(slice_offset_ptr(secret, 32)) ^ read_64le_unaligned(slice_offset_ptr(secret, 40))).wrapping_sub(seed);
+        let flip_hi = (read_64le_unaligned(slice_offset_ptr(secret, 48)) ^ read_64le_unaligned(slice_offset_ptr(secret, 56))).wrapping_add(seed);
+        let input_lo = read_64le_unaligned(input.as_ptr());
+        let mut input_hi = read_64le_unaligned(slice_offset_ptr(input, input.len() - 8));
 
-    let (mut mul_low, mut mul_high) = mul64_to128(input_lo ^ input_hi ^ flip_lo, xxh64::PRIME_1);
+        let (mut mul_low, mut mul_high) = mul64_to128(input_lo ^ input_hi ^ flip_lo, xxh64::PRIME_1);
 
-    mul_low = mul_low.wrapping_add((input.len() as u64 - 1) << 54);
-    input_hi ^= flip_hi;
+        mul_low = mul_low.wrapping_add((input.len() as u64 - 1) << 54);
+        input_hi ^= flip_hi;
 
-    //Separate code for 32bit and bigger targets
-    //It only makes sense when width is multiple of 2, but if necessary change to simple if
-    //Not to mention I'm not sure you can even compile u128 on something like 16bit?
-    #[cfg(any(target_pointer_width = "32", target_pointer_width = "16", target_pointer_width = "8"))]
-    {
-        mul_high = mul_high.wrapping_add(
-            (input_hi & 0xFFFFFFFF00000000).wrapping_add(mult32_to64(input_hi as u32, xxh32::PRIME_2))
+        //Separate code for 32bit and bigger targets
+        //It only makes sense when width is multiple of 2, but if necessary change to simple if
+        //Not to mention I'm not sure you can even compile u128 on something like 16bit?
+        #[cfg(any(target_pointer_width = "32", target_pointer_width = "16", target_pointer_width = "8"))]
+        {
+            mul_high = mul_high.wrapping_add(
+                (input_hi & 0xFFFFFFFF00000000).wrapping_add(mult32_to64(input_hi as u32, xxh32::PRIME_2))
+            );
+        }
+
+        #[cfg(not(any(target_pointer_width = "32", target_pointer_width = "16", target_pointer_width = "8")))]
+        {
+            mul_high = mul_high.wrapping_add(
+                input_hi.wrapping_add(mult32_to64(input_hi as u32, xxh32::PRIME_2 - 1))
+            )
+        }
+
+        mul_low ^= mul_high.swap_bytes();
+
+        let (result_low, mut result_hi) = mul64_to128(mul_low, xxh64::PRIME_2);
+        result_hi = result_hi.wrapping_add(
+            mul_high.wrapping_mul(xxh64::PRIME_2)
         );
+
+        avalanche(result_low) as u128 | (avalanche(result_hi) as u128) << 64
     }
-
-    #[cfg(not(any(target_pointer_width = "32", target_pointer_width = "16", target_pointer_width = "8")))]
-    {
-        mul_high = mul_high.wrapping_add(
-            input_hi.wrapping_add(mult32_to64(input_hi as u32, xxh32::PRIME_2 - 1))
-        )
-    }
-
-    mul_low ^= mul_high.swap_bytes();
-
-    let (result_low, mut result_hi) = mul64_to128(mul_low, xxh64::PRIME_2);
-    result_hi = result_hi.wrapping_add(
-        mul_high.wrapping_mul(xxh64::PRIME_2)
-    );
-
-    avalanche(result_low) as u128 | (avalanche(result_hi) as u128) << 64
 }
 
 #[inline(always)]
 fn xxh3_128_4to8(input: &[u8], mut seed: u64, secret: &[u8]) -> u128 {
     seed ^= ((seed as u32).swap_bytes() as u64) << 32;
 
-    let lo = read_32le_unaligned(input.as_ptr());
-    let hi = read_32le_unaligned(slice_offset_ptr(input, input.len() - 4));
+    let lo = unsafe { read_32le_unaligned(input.as_ptr()) };
+    let hi = unsafe { read_32le_unaligned(slice_offset_ptr(input, input.len() - 4)) };
     let input_64 = (lo as u64).wrapping_add((hi as u64) << 32);
 
-    let flip = (read_64le_unaligned(slice_offset_ptr(secret, 16)) ^ read_64le_unaligned(slice_offset_ptr(secret, 24))).wrapping_add(seed);
+    let flip = unsafe { (read_64le_unaligned(slice_offset_ptr(secret, 16)) ^ read_64le_unaligned(slice_offset_ptr(secret, 24))).wrapping_add(seed) };
     let keyed = input_64 ^ flip;
 
     let (mut lo, mut hi) = mul64_to128(keyed, xxh64::PRIME_1.wrapping_add((input.len() as u64) << 2));
@@ -891,8 +898,8 @@ fn xxh3_128_1to3(input: &[u8], seed: u64, secret: &[u8]) -> u128 {
     let input_lo = (c1 as u32) << 16 | (c2 as u32) << 24 | c3 as u32 | (input.len() as u32) << 8;
     let input_hi = input_lo.swap_bytes().rotate_left(13);
 
-    let flip_lo = (read_32le_unaligned(slice_offset_ptr(secret, 0)) as u64 ^ read_32le_unaligned(slice_offset_ptr(secret, 4)) as u64).wrapping_add(seed);
-    let flip_hi = (read_32le_unaligned(slice_offset_ptr(secret, 8)) as u64 ^ read_32le_unaligned(slice_offset_ptr(secret, 12)) as u64).wrapping_sub(seed);
+    let flip_lo = unsafe { (read_32le_unaligned(slice_offset_ptr(secret, 0)) as u64 ^ read_32le_unaligned(slice_offset_ptr(secret, 4)) as u64).wrapping_add(seed) };
+    let flip_hi = unsafe { (read_32le_unaligned(slice_offset_ptr(secret, 8)) as u64 ^ read_32le_unaligned(slice_offset_ptr(secret, 12)) as u64).wrapping_sub(seed) };
     let keyed_lo = input_lo as u64 ^ flip_lo;
     let keyed_hi = input_hi as u64 ^ flip_hi;
 
@@ -908,8 +915,8 @@ fn xxh3_128_0to16(input: &[u8], seed: u64, secret: &[u8]) -> u128 {
     } else if input.len() > 0 {
         xxh3_128_1to3(input, seed, secret)
     } else {
-        let flip_lo = read_64le_unaligned(slice_offset_ptr(secret, 64)) ^ read_64le_unaligned(slice_offset_ptr(secret, 72));
-        let flip_hi = read_64le_unaligned(slice_offset_ptr(secret, 80)) ^ read_64le_unaligned(slice_offset_ptr(secret, 88));
+        let flip_lo = unsafe { read_64le_unaligned(slice_offset_ptr(secret, 64)) ^ read_64le_unaligned(slice_offset_ptr(secret, 72)) };
+        let flip_hi = unsafe { read_64le_unaligned(slice_offset_ptr(secret, 80)) ^ read_64le_unaligned(slice_offset_ptr(secret, 88)) };
         xxh64::avalanche(seed ^ flip_lo) as u128 | (xxh64::avalanche(seed ^ flip_hi) as u128) << 64
     }
 }
@@ -919,27 +926,29 @@ fn xxh3_128_7to128(input: &[u8], seed: u64, secret: &[u8]) -> u128 {
     let mut lo = (input.len() as u64).wrapping_mul(xxh64::PRIME_1);
     let mut hi = 0;
 
-    if input.len() > 32 {
-        if input.len() > 64 {
-            if input.len() > 96 {
+    unsafe {
+        if input.len() > 32 {
+            if input.len() > 64 {
+                if input.len() > 96 {
+                    mix32_b(&mut lo, &mut hi,
+                            slice_offset_ptr(input, 48), slice_offset_ptr(input, input.len() - 64),
+                            slice_offset_ptr(secret, 96), seed);
+                }
+
                 mix32_b(&mut lo, &mut hi,
-                        slice_offset_ptr(input, 48), slice_offset_ptr(input, input.len() - 64),
-                        slice_offset_ptr(secret, 96), seed);
+                        slice_offset_ptr(input, 32), slice_offset_ptr(input, input.len() - 48),
+                        slice_offset_ptr(secret, 64), seed);
             }
 
             mix32_b(&mut lo, &mut hi,
-                    slice_offset_ptr(input, 32), slice_offset_ptr(input, input.len() - 48),
-                    slice_offset_ptr(secret, 64), seed);
+                    slice_offset_ptr(input, 16), slice_offset_ptr(input, input.len() - 32),
+                    slice_offset_ptr(secret, 32), seed);
         }
 
         mix32_b(&mut lo, &mut hi,
-                slice_offset_ptr(input, 16), slice_offset_ptr(input, input.len() - 32),
-                slice_offset_ptr(secret, 32), seed);
+                input.as_ptr(), slice_offset_ptr(input, input.len() - 16),
+                secret.as_ptr(), seed);
     }
-
-    mix32_b(&mut lo, &mut hi,
-            input.as_ptr(), slice_offset_ptr(input, input.len() - 16),
-            secret.as_ptr(), seed);
 
     let result_lo = lo.wrapping_add(hi);
     let result_hi = lo.wrapping_mul(xxh64::PRIME_1)
@@ -961,23 +970,27 @@ fn xxh3_128_129to240(input: &[u8], seed: u64, secret: &[u8]) -> u128 {
 
     for idx in 0..4 {
         let idx = 32 * idx;
-        mix32_b(&mut lo, &mut hi,
+        unsafe {
+            mix32_b(&mut lo, &mut hi,
                 slice_offset_ptr(input, idx), slice_offset_ptr(input, idx + 16),
                 slice_offset_ptr(secret, idx), seed);
+        };
     }
 
     lo = avalanche(lo);
     hi = avalanche(hi);
 
-    for idx in 4..nb_rounds {
-        mix32_b(&mut lo, &mut hi,
-                slice_offset_ptr(input, 32 * idx), slice_offset_ptr(input, (32 * idx) + 16),
-                slice_offset_ptr(secret, START_OFFSET.wrapping_add(32 * (idx - 4))), seed);
-    }
+    unsafe {
+        for idx in 4..nb_rounds {
+            mix32_b(&mut lo, &mut hi,
+                    slice_offset_ptr(input, 32 * idx), slice_offset_ptr(input, (32 * idx) + 16),
+                    slice_offset_ptr(secret, START_OFFSET.wrapping_add(32 * (idx - 4))), seed);
+        }
 
-    mix32_b(&mut lo, &mut hi,
-            slice_offset_ptr(input, input.len() - 16), slice_offset_ptr(input, input.len() - 32),
-            slice_offset_ptr(secret, SECRET_SIZE_MIN - LAST_OFFSET - 16), 0u64.wrapping_sub(seed));
+        mix32_b(&mut lo, &mut hi,
+                slice_offset_ptr(input, input.len() - 16), slice_offset_ptr(input, input.len() - 32),
+                slice_offset_ptr(secret, SECRET_SIZE_MIN - LAST_OFFSET - 16), 0u64.wrapping_sub(seed));
+    }
 
     let result_lo = lo.wrapping_add(hi);
     let result_hi = lo.wrapping_mul(xxh64::PRIME_1)
